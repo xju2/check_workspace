@@ -18,7 +18,8 @@ def get_mass(input_str):
 
 def tabulize_limit(file_name):
     out = ""
-    out +="\\begin{table}[!htb]\n \t\\centering\n\t\\caption{}\n \t\\begin{tabular}{*{7}{c}}\n"
+    out +="\\begin{table}[!htb]\n \t\\centering\n\t\\caption{}\n"
+    out +="\t\\vspace{0.3cm}\n \t\\resizebox*{!}{\\dimexpr\\textheight-2\\baselineskip\\relax}{\n \t\\begin{tabular}{*{7}{c}}\n"
     out += "\tmH & -2~$\sigma$ & -1~$\sigma$ & median & 1~$\sigma$ & 2~$\sigma$ & observed \\\\ \\hline"
     out += '\n'
     indices = 1, 2
@@ -32,6 +33,6 @@ def tabulize_limit(file_name):
             out += ' & '.join(new_list)
             out += ' \\\\ \n'
     out += '\\hline\n'
-    out += "\t\\end{tabular}\n\\end{table}\n"
+    out += "\t\\end{tabular}\n}\n\\end{table}\n"
 
     print out
