@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 import sys
 import os
@@ -16,6 +16,7 @@ parser = OptionParser(usage=usage, description="check yields and shape for WS", 
 (options,args) = parser.parse_args()
 option_dir = {
     "limitToTable":helper.tabulize_limit,
+    "combYields": helper.get_total_yields,
 }
 if len(args) < 1:
     parser.print_help()
