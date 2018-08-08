@@ -2,18 +2,26 @@
 """
 plot the shape from workspace
 """
+
+#from __future__ import print_function
 import ROOT
 from optparse import OptionParser
 from ROOT import RooFit
+import math
+
+import numpy as np
 import os
 import sys
 
 sys.path.insert(0, '/afs/cern.ch/user/x/xju/work/h4l/h4lcode/root_plot_utils')
 from root_plot_utils.ploter import Ploter
+from root_plot_utils.adder import adder
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '..')))
 
 from check_workspace import helper
+#from check_workspace import roostats_utils as rsu
+from check_workspace import root_utils as rtu
 
 class WSReader:
     def __init__(self, file_name, out_name, options):
@@ -32,6 +40,13 @@ class WSReader:
         # for plotting the histograms
         self.hist_list = []
         self.tag_list = []
+        if os.path.exists('correlation.root'):
+            f1 = ROOT.TFile.Open("correlation.root")
+            self.corr = f1.Get("correlation_matrix")
+            self.corr.SetDirectory(0)
+            f1.Close()
+            print "Correlation matrix is ready"
+            print self.corr.GetXaxis().GetNbins()
 
     def get_fit_name(self):
         if self.options.cond_fit:
@@ -168,7 +183,7 @@ class WSReader:
         nll.enableOffsetting(True)
         minim = ROOT.RooMinimizer(nll)
         minim.optimizeConst(2)
-        minim.setStrategy(1)
+        minim.setStrategy(2)
         #minim.setProfile()
         status = minim.minimize(
             "Minuit2",
@@ -184,12 +199,29 @@ class WSReader:
         if self.options.matrix:
             fit_res = minim.save()
             corr_hist = fit_res.correlationHist()
+            self.corr = corr_hist.Clone("corr")
+            self.corr.SetDirectory(0)
+
             self.ps.plot_correlation(corr_hist, self.out_name+"_correlation_matrix", 0.05)
             fout = ROOT.TFile.Open("correlation.root", 'recreate')
             corr_hist.Write()
             fit_res.SetName("nll_res")
             fit_res.Write()
             fout.Close()
+
+
+    def get_sys_for_NPs(self):
+        """
+        assuming all nuisance parameters are in best-fitted state...
+        Fix one of them each time, then evaluate the total bakcground yields
+        """
+        ##self.sys_dict = {}
+        self.sys_list = []
+        itr = self.mc.GetNuisanceParameters()
+        var = itr()
+        while var:
+            name = var.GetName()
+            error = var.getError()
 
     def redefine_range(self, obs_first):
         #obs_first = obs.first()
@@ -237,6 +269,8 @@ class WSReader:
         no_plot = options.no_plot
         yield_out_str = "\n"+self.fin.GetName()+"\n"
 
+        nuisances = self.mc.GetNuisanceParameters()
+
         while obj:
             del self.hist_list[:]
             del self.tag_list[:]
@@ -280,6 +314,34 @@ class WSReader:
             bonly_evts = pdf.expectedEvents(obs)
             if hist_bonly.Integral() > 1E-6:
                 hist_bonly.Scale(bonly_evts/hist_bonly.Integral())
+
+
+            # get background uncertainties
+            bkg_sys = 0
+            if self.corr:
+                sys_list = []
+                for ix in range(1, self.corr.GetXaxis().GetNbins()+1):
+                    name = self.corr.GetXaxis().GetBinLabel(ix)
+                    nom = self.ws.var(name).getVal()
+                    error = self.ws.var(name).getError()
+                    self.ws.var(name).setVal(nom + error)
+                    up_bkg = pdf.expectedEvents(obs)
+                    self.ws.var(name).setVal(nom - error)
+                    down_bkg = pdf.expectedEvents(obs)
+                    bkg_error = (up_bkg - down_bkg)/2.
+                    sys_list.append(bkg_error)
+                    self.ws.var(name).setVal(nom)
+
+                print "Total Variations: ", len(sys_list)
+                print sys_list
+                sys_np = np.array(sys_list)
+                correlation_matrix = rtu.TH2_to_numpy(self.corr)
+                total_bkg_sys = math.sqrt(np.matmul(sys_np.transpose(),
+                                                    np.matmul(correlation_matrix, sys_np.transpose())
+                                                   )
+                                         )
+                bkg_sys = total_bkg_sys/bonly_evts
+
 
             # get signal only spectrum
             if self.options.sigPDF:
@@ -354,16 +416,22 @@ class WSReader:
 
                 self.ps.prepare_2pad_canvas("canvas", 600, 600)
                 self.ps.pad2.cd()
+                self.ps.add_ratio_panel([hist_data, sum_bkg], "Data/MC", 0.50, 2.0)
+                # add uncertainty band for background...
+                if bkg_sys > 0:
+                    print "background systematic: ", bkg_sys
+                    gr = adder.add_band(sum_bkg, 1., bkg_sys, False)
+                    #gr.Print()
+                    gr.Draw("CF SAME")
 
-                self.ps.add_ratio_panel([hist_data, sum_bkg], "Data/MC", 0.55, 1.42)
+
                 self.ps.pad1.cd()
-
                 self.ps.get_offset(hist_splusb)
 
                 self.ps.set_y_range([hist_data, hist_splusb], options.is_logY)
                 #this_hist = self.ps.set_y_range(hist_data, hist_splusb, options.is_logY)
                 hist_data.SetXTitle(obs_var.GetName())
-                hist_data.SetYTitle("Events")
+                hist_data.SetYTitle("Events / 20 GeV")
 
                 if hist_data:
                     legend = self.ps.get_legend(len(self.hist_list) + 3)
@@ -392,7 +460,10 @@ class WSReader:
 
                 legend.Draw("same")
                 self.ps.add_atlas()
-                self.ps.add_lumi()
+                if "2017" in cat_name:
+                    self.ps.add_lumi(43.7)
+                else:
+                    self.ps.add_lumi(36.1)
                 out_plot_name = self.get_outplot_name(cat_name)
                 self.ps.can.SaveAs(out_plot_name+".pdf")
 
