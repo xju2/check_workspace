@@ -67,3 +67,4 @@ legend.Draw()
 #ps.add_atlas()
 
 ps.can.SaveAs("qqZZ_cmp.png")
+ps.can.SaveAs("qqZZ_cmp.eps")

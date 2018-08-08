@@ -9,7 +9,6 @@ import os
 import sys
 
 sys.path.insert(0, '/afs/cern.ch/user/x/xju/work/h4l/h4lcode/root_plot_utils')
-from root_plot_utils import AtlasStyle
 from root_plot_utils.ploter import Ploter
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '..')))
@@ -52,11 +51,12 @@ class WSReader:
         return fitted_file_name
 
     def get_fix_var_name(self):
-        if self.options.poi is not None and len(self.options.poi) > 0:
+        if self.options.fixVar is not None:
             out = ""
-            for poi_str in self.options.poi:
-                name,value = poi_str.split(':')
-                out += name+value+"_"
+            for poi_str in self.options.fixVar.split(','):
+                # name,value = poi_str.split('=')
+                # out += name+value+"_"
+                out += "_".join(poi_str.split('='))
             return out
         else:
             return None
@@ -411,16 +411,16 @@ class WSReader:
 
         f_out.Close()
 
-    def get_yields(self):
-        iter_category = ROOT.TIter(self.categories.typeIterator())
-        obj = iter_category()
-        total_signal = 0
-        total_bkg = 0;
-        total_data = 0
-        do_full_range = False
+    #def get_yields(self):
+    #    iter_category = ROOT.TIter(self.categories.typeIterator())
+    #    obj = iter_category()
+    #    total_signal = 0
+    #    total_bkg = 0;
+    #    total_data = 0
+    #    do_full_range = False
 
-        while obj:
-            obj = iter_category()
+    #    while obj:
+    #        obj = iter_category()
 
 if __name__ == "__main__":
     usage = "%prog [options] file_name out_name"
@@ -464,6 +464,8 @@ if __name__ == "__main__":
         out_name = "test"
 
     ROOT.gROOT.SetBatch()
+    from root_plot_utils import AtlasStyle
+
     ws_reader = WSReader(args[0], out_name, options)
     ws_reader.open_ws()
     ws_reader.fix_var()
