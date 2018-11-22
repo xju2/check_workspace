@@ -120,8 +120,11 @@ def get_total_yields(file_name):
     print "{:.2f} +{:.2f} -{:.2f}".format(total, total_up, total_down)
     return total, total_up, total_down
 
-def compatability(obs, exp, up, down):
-    sig_var = ROOT.RooRealVar("sig_var", "signal yields", 226., -500., 500.)
+def compatability(obs, exp, up, down, out_name=None):
+    sig_exp = obs - exp
+    max_sig = sig_exp * 1.5
+    min_sig = sig_exp * 0.5
+    sig_var = ROOT.RooRealVar("sig_var", "signal yields", sig_exp, min_sig, max_sig)
     exp_var = ROOT.RooRealVar("exp_var", "expected yields", exp)
 
     nuis_exp = ROOT.RooRealVar("nuis_exp", "nuisance parameter", 0., -5., 5.)
@@ -147,7 +150,9 @@ def compatability(obs, exp, up, down):
     minim_nll = nll.getVal()
     sig_list = []
     nll_list = []
-    for sig in range(-100, 400, 1):
+    ninputs = 30
+    for sig_id in range(ninputs+1):
+        sig = min_sig + (max_sig - min_sig)*sig_id/ninputs
         sig_list.append(sig)
         sig_var.setVal(sig)
         sig_var.setConstant()
@@ -155,15 +160,23 @@ def compatability(obs, exp, up, down):
         nll_list.append(2*(nll.getVal() - minim_nll))
 
     sig_var.setVal(0.)
+    sig_var.setConstant()
     minim.minimize("Minuit2", ROOT.Math.MinimizerOptions.DefaultMinimizerAlgo())
-    print "sigma",math.sqrt(2*(nll.getVal() - minim_nll))
-    return math.sqrt(2*(nll.getVal() - minim_nll))
+    significance = math.sqrt(2*(nll.getVal() - minim_nll))
+    p0 = ROOT.RooStats.SignificanceToPValue(significance)
 
-    #gr = ROOT.TGraph(len(sig_list), array.array('f', sig_list), array.array('f', nll_list))
-    #c1 = ROOT.TCanvas("c1", "c1", 600, 600)
-    #gr.Draw("ALP")
-    #gr.GetYaxis().SetRangeUser(0., gr.GetYaxis().GetXmax())
-    #c1.SaveAs("test.pdf")
+    gr = ROOT.TGraph(len(sig_list), array.array('f', sig_list), array.array('f', nll_list))
+    c1 = ROOT.TCanvas("c1", "c1", 600, 600)
+    gr.Draw("ALP")
+    gr.GetYaxis().SetRangeUser(0., gr.GetYaxis().GetXmax())
+    if out_name is not None:
+        c1.SaveAs(out_name)
+    else:
+        c1.SaveAs("{:.2f}_{:.2f}_{:.2f}.pdf".format(obs, exp, up))
+
+    print "sigma: ", significance
+    print "p0: ", p0
+    return math.sqrt(2*(nll.getVal() - minim_nll)), p0
 
 if __name__ == "__main__":
     # compatability(1870.00, 1643.18, 164.05, 163.91)
